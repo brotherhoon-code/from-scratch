@@ -7,11 +7,8 @@ import torch.nn as nn
 '''
 reference
     https://github.com/rishikksh20/MLP-Mixer-pytorch
-    
 
 ## 1. 모델 설계  
-계층 구조를 아래와 같이 설계하였습니다.  
-```
 MLP_Mixer
     PatchEmbeddingBlock
     MixerBlock
@@ -21,19 +18,19 @@ MLP_Mixer
         DenseBlock
     GlobalAvgPool1d
     Classifier
-```
+
   
 ## 2. 구현 포인트  
-* PatchEmbedBlock
+PatchEmbedBlock
     - einops의 nn.Conv2d를 활용하여 임배딩 한 뒤, Rearrange('b c h w -> b c (h w)')를 이용하여 patch를 flatten하였습니다.
-* MixerBlock
+MixerBlock
     - einops의 Rearrange('b p c -> b c p')를 이용하여 transpose하였습니다.
 
   
 ## 3. 주의 사항  
-* activation function은 nn.Linear 사이에 GELU 한개밖에 존재하지 않습니다.
-* MLP_Mixer에는 포지셔널 인코딩이 없습니다. 
-* ViT처럼 head만을 classifier의 input으로 사용하지 않습니다, channel dim에서의 mean을 해서 사용합니다.
+activation function은 nn.Linear 사이에 GELU 한개밖에 존재하지 않습니다.
+MLP_Mixer에는 포지셔널 인코딩이 없습니다. 
+ViT처럼 head만을 classifier의 input으로 사용하지 않습니다, channel dim에서의 mean을 해서 사용합니다.
 
 '''
 
