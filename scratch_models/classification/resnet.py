@@ -88,8 +88,7 @@ class BasicBlock(nn.Module):
     def forward(self, x):
         skip = self.shortcut(x)
         x = self.block(x) + skip
-        x = F.relu(x)
-        return x
+        return F.relu(x)
     
 
 # 각 stage당 n번 반복되는 resnet bottleneck 블록입니다.
@@ -144,8 +143,7 @@ class BottleNeckBlock(nn.Module):
     def forward(self, x):
         skip = self.shortcut(x)
         x = self.block(x) + skip
-        x = F.relu(x)
-        return x
+        return F.relu(x)
     
 
 class ResNet(nn.Module):

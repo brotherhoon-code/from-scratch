@@ -105,8 +105,7 @@ class BasicBlock(nn.Module):
         seblock_out = self.seblock(x)
         seblock_out = repeat(seblock_out, 'b c -> b c h w', h=x.size(2), w=x.size(3))
         x = x*seblock_out + identity
-        x = F.relu(x)
-        return x
+        return F.relu(x)
     
 
 # 각 stage당 n번 반복되는 resnet bottleneck 블록입니다.
@@ -161,17 +160,12 @@ class BottleNeckBlock(nn.Module):
         
         
     def forward(self, x):
-        
         identity = self.shortcut(x)
         x = self.block(x) # b c h w
         seblock_out = self.seblock(x)
         seblock_out = repeat(seblock_out, 'b c -> b c h w', h=x.size(2), w=x.size(3))
         x = x*seblock_out + identity
-        
-        # skip = self.shortcut(x)
-        # x = self.block(x) + skip
-        # x = F.relu(x)
-        return x
+        return F.relu(x)
     
 
 class SEResNet(nn.Module):

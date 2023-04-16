@@ -9,10 +9,12 @@ import itertools
 
 def conv2d_bn(in_c, out_c, k_size, s=1, p=0, bn=True):
     list_layers = []
+    
     list_layers.append(nn.Conv2d(in_c, out_c, k_size, s, p))
     if bn:
         list_layers.append(nn.BatchNorm2d(out_c))
     list_layers.append(nn.LeakyReLU(0.1, inplace=True))
+    
     return nn.Sequential(*list_layers)
 
 class Squeeze(nn.Module):
@@ -29,7 +31,8 @@ class DarkNet(nn.Module):
         super(DarkNet, self).__init__()
         self.is_cls_head = is_cls_head
         self.bbone = self._make_layers(bn=bn)
-        self.cls_head = self._make_classifier() if is_cls_head else nn.Sequential()
+        if self.is_cls_head:
+            self.cls_head = self._make_classifier() if is_cls_head else nn.Sequential()
         
     def forward(self, x):
         x = self.bbone(x)
@@ -80,5 +83,5 @@ class DarkNet(nn.Module):
 
 
 if __name__  == "__main__":
-    darknet = DarkNet(is_cls_head=True, bn=True)
+    darknet = DarkNet(is_cls_head=False, bn=True)
     summary(darknet, (3,224,224), batch_size=2, device='cpu')

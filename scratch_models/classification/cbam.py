@@ -154,7 +154,7 @@ class BasicBlock(nn.Module):
         
         x = x*spatial_attn_map
         out = x + identity
-        return out
+        return F.relu(out)
 
 
     
@@ -230,7 +230,7 @@ class BottleNeckBlock(nn.Module):
         
         x = x*spatial_attn_map
         out = x + identity
-        return out
+        return F.relu(out)
     
 
 
