@@ -7,40 +7,7 @@ from einops.layers.torch import Rearrange, Reduce
 
 
 '''
-ref: https://github.com/xxxnell/spatial-smoothing/blob/master/models/resnet.py
-
-## 1. 모델 설계  
-ResNet
-    stem_block
-        __init__에서 nn.Sequential을 통해서 만들어집니다.
-        stride와 maxpool을 이용하여 resolution의 축소가 일어납니다.
-    make_stage
-        __init__에 argument로 전달된 nn.Module (e.g)BasicBlock, BottleNeckBlock의 반복으로 레이어를 만듭니다.
-        2번쨰 스테이부터 첫번째 block에서만 stride가 존재하므로 이를 반영했습니다.
-    neck
-        Global Average Pooling입니다.
-    classifier
-        nn.Linear입니다.
-        
-BasicBlock
-    resnet18과 resnet34에서 사용하는 블록입니다.
-    기본 블록는 3x3 conv -> BN -> ReLU -> 3x3 conv -> BN -> ReLU로 설계되어있습니다.
-    stride !=1 아닐 경우 차원수가 맞지 않아 identity를 더할 수 없으므로 stride 1x1 Conv를 이용하여 resolution을 줄입니다.
-
-BottleNeckBlock
-    resnet50이후에서 사용하는 블록입니다.
-    기본 블록은 1x1 conv(체널 축소) -> BN,ReLU -> 3x3 conv -> BN,ReLU -> 1x1 conv(체널확장) -> BN, ReLU로 설계되어있습니다.
-    그외 stride != 1을 고려한 경우는 BasicBlock과 동일합니다.
-
-
-## 2. 구현 포인트  
-make_stage를 이용하여 반복적인 구조 설계가 포인트 입니다.
-첫번째 stage의 block에만 적용되는 stride를 어떻게 처리하는 로직이 재미있습니다.
-    stride_arr = [stride] + [1] * (num_blocks-1)
-
-
-## 3. 주의 사항  
-레즈넷은 봐도봐도 복잡합니다.
+ref: https://github.com/dl19940602/GCnet-pytorch
 '''
 
 # 각 stage당 n번 반복되는 resnet 기본 블록입니다.
@@ -144,20 +111,24 @@ class BottleNeckBlock(nn.Module):
         skip = self.shortcut(x)
         x = self.block(x) + skip
         return F.relu(x)
-    
 
-class ResNet(nn.Module):
+
+
+class GCNet(nn.Module):
     def __init__(self, 
                  block_cls =  BottleNeckBlock, 
                  deep_stem = True, # for cifar
-                 n_blocks = [3,4,6,3],
+                 n_blocks = [3, 4, 6, 3],
                  n_classes = 100, 
+                 n_context_stage_idx = [1, 2, 3, 4],
                  **kwargs):
-        super(ResNet, self).__init__()
+        super(GCNet, self).__init__()
         self.block_cls = block_cls
         self.n_blocks = n_blocks
         self.n_classes = n_classes
         self.expansion = block_cls.expansion
+        
+        self.context_blocks = nn.ModuleList()
         
         self.stem = []
         if deep_stem:
@@ -171,20 +142,42 @@ class ResNet(nn.Module):
             self.stem.append(nn.ReLU())
         
         self.stem_block = nn.Sequential(*self.stem)
+        
         self.stage1_block = self._make_stage(self.block_cls, 64, 64, n_blocks[0], 1)
+        self.context_blocks.append(
+            GlobalContextBlock(in_channels=64*self.expansion)) if 1 in n_context_stage_idx else self.context_blocks.append(nn.Sequential())
+        
         self.stage2_block = self._make_stage(self.block_cls, 64*self.expansion, 128, n_blocks[1], 2)
+        self.context_blocks.append(
+            GlobalContextBlock(in_channels=128*self.expansion)) if 2 in n_context_stage_idx else self.context_blocks.append(nn.Sequential())
+        
         self.stage3_block = self._make_stage(self.block_cls, 128*self.expansion, 256, n_blocks[2], 2)
+        self.context_blocks.append(
+            GlobalContextBlock(in_channels=256*self.expansion)) if 3 in n_context_stage_idx else self.context_blocks.append(nn.Sequential())
+        
         self.stage4_block = self._make_stage(self.block_cls, 256*self.expansion, 512, n_blocks[3], 2)
+        self.context_blocks.append(
+            GlobalContextBlock(in_channels=512*self.expansion)) if 4 in n_context_stage_idx else self.context_blocks.append(nn.Sequential())
+        
         self.neck = nn.AdaptiveAvgPool2d((1,1))
         self.classifier = nn.Linear(512*self.expansion, self.n_classes)
         
         
     def forward(self, x):
         x = self.stem_block(x)
+        
         x = self.stage1_block(x)
+        x = self.context_blocks[0](x)
+        
         x = self.stage2_block(x)
+        x = self.context_blocks[1](x)
+        
         x = self.stage3_block(x)
+        x = self.context_blocks[2](x)
+        
         x = self.stage4_block(x)
+        x = self.context_blocks[3](x)
+        
         x = self.neck(x)
         x = x.view(x.size()[0], -1)
         x = self.classifier(x)
@@ -198,8 +191,44 @@ class ResNet(nn.Module):
             layers.append(block(channels, out_channels, stride))
             channels = out_channels * block.expansion
         return nn.Sequential(*layers)
-    
+
+
+class GlobalContextBlock(nn.Module):
+    def __init__(self,
+                 in_channels:int = 64, 
+                 ratio:int = 16, 
+                 pool:str = 'attn', 
+                 fusion:str = 'add'):
+        super(GlobalContextBlock, self).__init__()
+        self.reshape_q = Rearrange('b c h w -> b c (h w)')
+        
+        self.W_k = nn.Conv2d(in_channels, 1, 1)
+        self.reshape_k = Rearrange('b c h w -> b (h w) c')
+        
+        self.transform = nn.Sequential(
+            nn.Conv2d(in_channels, in_channels//ratio, 1),
+            nn.LayerNorm([in_channels // ratio, 1, 1]),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(in_channels//ratio, in_channels, 1),
+        )
+        
+    def forward(self, x):
+        _, _, height, width = x.size(0), x.size(1), x.size(2), x.size(3)
+        identity = x
+        Q = self.reshape_q(x) # b c n
+        Q = F.softmax(Q, dim=-1)
+        
+        K = self.W_k(x)
+        K = self.reshape_k(K) # b n 1
+        
+        context = torch.matmul(Q, K).unsqueeze(-1) # b c 1 1
+        context = self.transform(context) # b c 1 1
+        context = repeat(context, 'b c 1 1-> b c h w', h=height, w=width) # b c h w
+        
+        out = context + identity # b c h w
+        
+        return out
 
 if __name__ == "__main__":
-    m = ResNet(BottleNeckBlock, True, [3,4,6,3], 10)
-    summary(m, (3,224,224), device='cpu', batch_size=128)
+    m = GCNet()
+    summary(m, (3,224,224), device='cpu', batch_size=1)

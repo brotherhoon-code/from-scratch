@@ -294,11 +294,12 @@ class BottleNeckBlock(nn.Module):
 
 class NonLocalResNet(nn.Module):
     def __init__(self, 
-                 block_cls, 
-                 n_blocks,
-                 n_classes, 
-                 n_local_cls, 
-                 n_local_stage_idx,
+                 block_cls = BottleNeckBlock, 
+                 deep_stem = True,
+                 n_blocks = [3,4,6,3],
+                 n_classes = 100, 
+                 n_local_cls = "EmbeddedGaussianNonLocalBlock", 
+                 n_local_stage_idx = [1, 2, 3, 4],
                  **kwargs):
         super(NonLocalResNet, self).__init__()
         self.block_cls = block_cls
@@ -307,12 +308,25 @@ class NonLocalResNet(nn.Module):
         self.expansion = block_cls.expansion
         
         self.non_local_blocks = nn.ModuleList()
+        if n_local_cls == "GaussianNonLocalBlock":
+            n_local_cls = GaussianNonLocalBlock
+        elif n_local_cls == "DotProductNonLocalBlock":
+            n_local_cls = DotProductNonLocalBlock
+        elif n_local_cls == "ConcatNonLocalBlock":
+            n_local_cls = ConcatNonLocalBlock
+        else:
+            n_local_cls = EmbeddedGaussianNonLocalBlock
         
         self.stem = []
-        self.stem.append(nn.Conv2d(in_channels=3, out_channels=64, kernel_size=(7,7), stride=2, padding=3))
-        self.stem.append(nn.BatchNorm2d(64))
-        self.stem.append(nn.ReLU())
-        self.stem.append(nn.MaxPool2d(kernel_size=3, stride=2, padding=1))
+        if deep_stem:
+            self.stem.append(nn.Conv2d(in_channels=3, out_channels=64, kernel_size=(7,7), stride=2, padding=3))
+            self.stem.append(nn.BatchNorm2d(64))
+            self.stem.append(nn.ReLU())
+            self.stem.append(nn.MaxPool2d(kernel_size=3, stride=2, padding=1))
+        else:
+            self.stem.append(nn.Conv2d(in_channels=3, out_channels=64, kernel_size=(3,3), stride=1, padding=1))
+            self.stem.append(nn.BatchNorm2d(64))
+            self.stem.append(nn.ReLU())
         
         self.stem_block = nn.Sequential(*self.stem)
         
@@ -367,12 +381,13 @@ class NonLocalResNet(nn.Module):
 if __name__ == "__main__":
     
     m = NonLocalResNet(block_cls=BottleNeckBlock, 
+                       deep_stem = False,
                        n_blocks=[3,4,6,3], 
-                       n_classes=10, 
-                       n_local_cls=ConcatNonLocalBlock,
-                       n_local_stage_idx=[1,2,3,4]).cuda()
+                       n_classes=100, 
+                       n_local_cls="EmbeddedGaussianNonLocalBlock",
+                       n_local_stage_idx=[1,2,3,4])
     
-    summary(m, (3,32,32), batch_size=128, device="cuda")
+    summary(m, (3,32,32), batch_size=128, device="cpu")
     
     
     
