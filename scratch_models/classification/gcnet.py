@@ -230,5 +230,5 @@ class GlobalContextBlock(nn.Module):
         return out
 
 if __name__ == "__main__":
-    m = GCNet()
+    m = GCNet(deep_stem=True, n_context_stage_idx=[])
     summary(m, (3,224,224), device='cpu', batch_size=1)
