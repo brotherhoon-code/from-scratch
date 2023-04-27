@@ -161,11 +161,13 @@ class DeepLab_v1():
         self.mean = torch.Tensor([0.485, 0.456, 0.406]).view(-1, 1, 1)
         self.std = torch.Tensor([0.229, 0.224, 0.225]).view(-1, 1, 1)
         
-    def forward(self, x): # for check dim
+    def forward(self, x):
+        """
+        forward 과정은 binear upsampling 만 존재합니다.
+        """
         B, C, H, W = x.shape
         x = self.model(x)
         x = F.resize(x, (H, W), Image.BILINEAR)
-        print(x.shape)
         return x
     
     def inference(self,
@@ -179,7 +181,7 @@ class DeepLab_v1():
         """
         1. 이미지를 읽어와서 DL모델을 이용해 작은 resolution으로 pred
         2. BILINEAR을 사용 upsampling
-        3. DenseDRF
+        3. DenseDRF(후처리)
         """
         self.model.eval()
         with torch.no_grad():
@@ -199,7 +201,7 @@ class DeepLab_v1():
             
             crf = DenseCRF(iter_max, bi_w, bi_xy_std, bi_rgb_std, pos_w, pos_xy_std)
             
-            predict = crf(image_tensor,output)
+            predict = crf(image_tensor, output)
             predict = np.argmax(predict, axis=0)
             
             return predict
@@ -207,6 +209,5 @@ class DeepLab_v1():
         
 
 if __name__ == "__main__":
-    print('hello world!')
     m = DeepLab_v1(10)
     m.forward(torch.Tensor(1,3,224,224))

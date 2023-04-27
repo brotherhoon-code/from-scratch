@@ -58,11 +58,11 @@ class UNet(nn.Module):
         
         # concated channels in
         self.dec2_2 = self._CBR(256,128)
-        self.dec2_1 = self._CBR(128,64)
-        self.unpool1 = nn.ConvTranspose2d(64, 64, kernel_size=2, stride=2, padding=0, bias=True)
+        self.dec2_1 = self._CBR(128,128)
+        self.unpool1 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2, padding=0, bias=True)
         
         # concated channels in
-        self.dec1_2 = self._CBR(128,64)
+        self.dec1_2 = self._CBR(64*2, 64)
         self.dec1_1 = self._CBR(64, 64)
         self.score_fr = nn.Conv2d(64, num_classes, kernel_size=1, stride=1, padding=0, bias=True)
         
@@ -114,7 +114,7 @@ class UNet(nn.Module):
 if __name__ == "__main__":
     m = UNet(10)
     summary(m, (3, 224,224), batch_size=1, device='cpu')
-    
+    # Trainable params: 30,953,802
         
         
         
