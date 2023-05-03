@@ -2,119 +2,110 @@ import torch
 import torch.nn as nn
 from torchsummary import summary
 
-class UNet(nn.Module):
-    
-    def _CBR(self,
-             in_channels,
-             out_channels,
-             kernel_size=3,
-             stride=1,
-             padding=1,
-             bias=True):
-        cbr = nn.Sequential(
-            nn.Conv2d(in_channels,
-                      out_channels,
-                      kernel_size=kernel_size,
-                      stride=stride,
-                      padding=padding,
-                      bias=bias),
+'''
+논문과는 다르게 크롭 부분 삭제함.
+'''
+class CBR_Block(nn.Module):
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 **kwargs):
+        super().__init__()
+        
+        self.cbr1 = nn.Sequential(
+            nn.Conv2d(in_channels=in_channels,
+                      out_channels=out_channels,
+                      kernel_size=3,
+                      stride=1,
+                      padding=1),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True)
         )
         
-        return cbr
-    
-    def __init__(self, num_classes=11):
-        super().__init__()
+        self.cbr2 = nn.Sequential(
+            nn.Conv2d(in_channels=out_channels,
+                      out_channels=out_channels,
+                      kernel_size=3,
+                      stride=1,
+                      padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True)
+        )
         
-        # contracting path
-        self.enc1_1 = self._CBR(3, 64)
-        self.enc1_2 = self._CBR(64, 64)
+    def forward(self, x):
+        x = self.cbr1(x)
+        x = self.cbr2(x)
+        return x
+    
+class UNet(nn.Module):
+    def __init__(self,
+                 n_classes):
+        super().__init__()
+        self.enc1 = CBR_Block(3, 64)
         self.pool1 = nn.MaxPool2d(kernel_size=2)
         
-        self.enc2_1 = self._CBR(64, 128)
-        self.enc2_2 = self._CBR(128, 128)
+        self.enc2 = CBR_Block(64, 128)
         self.pool2 = nn.MaxPool2d(kernel_size=2)
         
-        self.enc3_1 = self._CBR(128, 256)
-        self.enc3_2 = self._CBR(256, 256)
+        self.enc3 = CBR_Block(128, 256)
         self.pool3 = nn.MaxPool2d(kernel_size=2)
         
-        self.enc4_1 = self._CBR(256, 512)
-        self.enc4_2 = self._CBR(512, 512)
+        self.enc4 = CBR_Block(256, 512)
         self.pool4 = nn.MaxPool2d(kernel_size=2)
         
-        self.enc5_1 = self._CBR(512, 1024)
-        self.enc5_2 = self._CBR(1024, 1024)
+        self.enc5 = CBR_Block(512, 1024)
         self.unpool4 = nn.ConvTranspose2d(1024, 512, kernel_size=2, stride=2, padding=0, bias=True)
         
-        self.dec4_2 = self._CBR(1024,512)
-        self.dec4_1 = self._CBR(512,512)
-        self.unpool3 = nn.ConvTranspose2d(512, 256, kernel_size=2, stride=2, padding=0, bias=True)
+        self.dec4 = CBR_Block(1024, 512) # 512+512 -> 512
+        self.unpool3 = nn.ConvTranspose2d(512, 256, kernel_size=2, stride=2, padding=0, bias=True) # 512 -> 256
         
-        self.dec3_2 = self._CBR(512,256)
-        self.dec3_1 = self._CBR(256,256)
-        self.unpool2 = nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2, padding=0, bias=True)
+        self.dec3 = CBR_Block(256*2, 256) # 256+256 -> 256
+        self.unpool2 = nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2, padding=0, bias=True) # 256 -> 128
         
-        # concated channels in
-        self.dec2_2 = self._CBR(256,128)
-        self.dec2_1 = self._CBR(128,128)
-        self.unpool1 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2, padding=0, bias=True)
+        self.dec2 = CBR_Block(128*2, 128) # 128+128 -> 128
+        self.unpool1 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2, padding=0, bias=True) # 128 -> 64
         
-        # concated channels in
-        self.dec1_2 = self._CBR(64*2, 64)
-        self.dec1_1 = self._CBR(64, 64)
-        self.score_fr = nn.Conv2d(64, num_classes, kernel_size=1, stride=1, padding=0, bias=True)
+        self.dec1 = CBR_Block(64*2, 64)
+        
+        self.seg_head = nn.Conv2d(64, n_classes, 1, 1)
         
         
     def forward(self, x):
-        enc1_1 = self.enc1_1(x)
-        enc1_2 = self.enc1_2(enc1_1)
-        pool1 = self.pool1(enc1_2)
+        enc1_out = self.enc1(x) # 3 -> 64
+        pool1_out = self.pool1(enc1_out) # 64 -> 64
         
-        enc2_1 = self.enc2_1(pool1)
-        enc2_2 = self.enc2_2(enc2_1)
-        pool2 = self.pool2(enc2_2)
+        enc2_out = self.enc2(pool1_out) # 64 -> 128
+        pool2_out = self.pool2(enc2_out) # 128 -> 128
         
-        enc3_1 = self.enc3_1(pool2)
-        enc3_2 = self.enc3_2(enc3_1)
-        pool3 = self.pool3(enc3_2)
+        enc3_out = self.enc3(pool2_out) # 128 -> 256
+        pool3_out = self.pool3(enc3_out) # 256 -> 256
         
-        enc4_1 = self.enc4_1(pool3)
-        enc4_2 = self.enc4_2(enc4_1)
-        pool4 = self.pool4(enc4_2)
+        enc4_out = self.enc4(pool3_out) # 256 -> 512
+        pool4_out = self.pool4(enc4_out) # 512 -> 512
         
-        enc5_1 = self.enc5_1(pool4)
-        enc5_2 = self.enc5_2(enc5_1)
+        enc5_out = self.enc5(pool4_out) # 512 -> 1024
         
-        unpool4 = self.unpool4(enc5_2)
-        cat4 = torch.cat((unpool4, enc4_2), dim=1) # concat
-        dec4_2 = self.dec4_2(cat4)
-        dec4_1 = self.dec4_1(dec4_2)
+        out = self.unpool4(enc5_out) # 1024 -> 512
+        out = torch.cat((out, enc4_out),dim=1) # concat 512+512=1024 -> 1024
+        out = self.dec4(out) # 1024 -> 512
         
-        unpool3 = self.unpool3(dec4_1)
-        cat3 = torch.cat((unpool3, enc3_2), dim=1) # concat
-        dec3_2 = self.dec3_2(cat3)
-        dec3_1 = self.dec3_1(dec3_2)
+        out = self.unpool3(out) # 512-> 256
+        out = torch.cat((out, enc3_out), dim=1)
+        out = self.dec3(out) # concat 256*2 -> 256
         
-        unpool2 = self.unpool2(dec3_1)
-        cat2 = torch.cat((unpool2, enc2_2), dim=1) # concat
-        dec2_2 = self.dec2_2(cat2)
-        dec2_1 = self.dec2_1(dec2_2)
+        out = self.unpool2(out) # 256 -> 128
+        out = torch.cat((out, enc2_out), dim=1)
+        out = self.dec2(out) # 128*2 -> 128
         
-        unpool1 = self.unpool1(dec2_1)
-        cat1 = torch.cat((unpool1, enc1_2), dim=1) # concat
-        dec1_2 = self.dec1_2(cat1)
-        dec1_1 = self.dec1_1(dec1_2)
+        out = self.unpool1(out) # 128 -> 64
+        out = torch.cat((out, enc1_out), dim=1) # 64 -> 64*2
+        out = self.dec1(out) # 64*2 -> 64
+        out = self.seg_head(out) # 64 -> n_classes
         
-        output = self.score_fr(dec1_1)
-        
-        return output
+        return out
     
 if __name__ == "__main__":
+    img = (3, 224, 224)
     m = UNet(10)
-    summary(m, (3, 224,224), batch_size=1, device='cpu')
-    # Trainable params: 30,953,802
-        
-        
-        
+    summary(m, img, batch_size=1, device="cpu")
+    # 31,044,106

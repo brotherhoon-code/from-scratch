@@ -60,7 +60,7 @@ def make_layers()->list:
     """
     vgg16 = models.vgg16(pretrained=False)
     backbone = list(vgg16.features.children())
-    conv1 = nn.Sequential(*backbone[:4])
+    conv1 = nn.Sequential(*backbone[:4]) # conv:0-1-2-3: maxpool:4(del)
     conv2 = nn.Sequential(*backbone[5:9])
     conv3 = nn.Sequential(*backbone[10:16])
     conv4 = nn.Sequential(*backbone[17:23])
