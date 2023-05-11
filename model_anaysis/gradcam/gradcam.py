@@ -3,7 +3,7 @@
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
-from LayerExtractor import get_layer
+from layer_extractor import get_layer
 
 class GradCAM(object):
     def __init__(self,
