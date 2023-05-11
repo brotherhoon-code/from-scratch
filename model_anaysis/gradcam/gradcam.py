@@ -12,15 +12,15 @@ class GradCAM(object):
         model_name = model_name
         self.model = model 
         
-        self.hooked_gradients = dict()
-        self.hooked_activations = dict()
+        self.hooked_gradients = None
+        self.hooked_activations = None
         
         def backward_hook(module, grad_input, grad_output):
             self.hooked_gradients = grad_output[0]
-            return None
+
         def forward_hook(module, input, output):
             self.hooked_activations = output
-            return None
+            
         
         # get from model_type, layer_name, model_arch
         target_layer:nn.Module = get_layer(model_name, model) # type hinting
