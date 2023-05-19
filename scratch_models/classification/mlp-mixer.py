@@ -4,7 +4,7 @@ from einops.layers.torch import Rearrange, Reduce
 from torchsummary import summary
 import torch.nn as nn
 
-'''
+"""
 reference
     https://github.com/rishikksh20/MLP-Mixer-pytorch
 
@@ -32,42 +32,39 @@ activation function은 nn.Linear 사이에 GELU 한개밖에 존재하지 않습
 MLP_Mixer에는 포지셔널 인코딩이 없습니다. 
 ViT처럼 head만을 classifier의 input으로 사용하지 않습니다, channel dim에서의 mean을 해서 사용합니다.
 
-'''
+"""
+
 
 class PatchEmbedBlock(nn.Module):
-    def __init__(self, 
-                 img_size, 
-                 patch_size, 
-                 feature_dim):
+    def __init__(self, img_size, patch_size, feature_dim):
         super().__init__()
-        assert img_size%patch_size==0, 'img_size%patch_size != 0'
+        assert img_size % patch_size == 0, "img_size%patch_size != 0"
         self.img_size = img_size
-        self.n_patches = (img_size%patch_size)**2
-        self.embed_layer = nn.Conv2d(3, 
-                                     feature_dim, 
-                                     kernel_size=patch_size, 
-                                     stride=patch_size)
-        self.flatten_layer = Rearrange('b c h w -> b (h w) c')
+        self.n_patches = (img_size % patch_size) ** 2
+        self.embed_layer = nn.Conv2d(
+            3, feature_dim, kernel_size=patch_size, stride=patch_size
+        )
+        self.flatten_layer = Rearrange("b c h w -> b (h w) c")
 
     def forward(self, x):
-        assert x.shape[2] == self.img_size, 'input height != img_size'
-        assert x.shape[3] == self.img_size, 'input width != img_size'
+        assert x.shape[2] == self.img_size, "input height != img_size"
+        assert x.shape[3] == self.img_size, "input width != img_size"
         x = self.embed_layer(x)
         x = self.flatten_layer(x)
         return x
 
 
 class DenseBlock(nn.Module):
-    def __init__(self, dim, expansion_ratio, dropout=0.):
+    def __init__(self, dim, expansion_ratio, dropout=0.0):
         super().__init__()
         self.dim = dim
-        self.hidden_dim = int(expansion_ratio*dim)
+        self.hidden_dim = int(expansion_ratio * dim)
         self.net = nn.Sequential(
             nn.Linear(self.dim, self.hidden_dim),
             nn.GELU(),
             nn.Dropout(dropout),
             nn.Linear(self.hidden_dim, self.dim),
-            nn.Dropout(dropout)
+            nn.Dropout(dropout),
         )
 
     def forward(self, x):
@@ -76,21 +73,19 @@ class DenseBlock(nn.Module):
 
 
 class MixerBlock(nn.Module):
-    def __init__(self, 
-                 img_size, 
-                 patch_size, 
-                 feature_dim,
-                 expansion_ratio):
+    def __init__(self, img_size, patch_size, feature_dim, expansion_ratio):
         super().__init__()
-        self.n_patches = (img_size//patch_size)**2
+        self.n_patches = (img_size // patch_size) ** 2
         self.feature_dim = feature_dim
         self.layer_norm = nn.LayerNorm(feature_dim)
-        self.transpose_layer = Rearrange('b p c -> b c p')
-        self.token_mix_layer = DenseBlock(dim=self.n_patches, 
-                                          expansion_ratio=expansion_ratio)
-        self.channel_mix_layer = DenseBlock(dim=feature_dim, 
-                                            expansion_ratio=expansion_ratio)
-        
+        self.transpose_layer = Rearrange("b p c -> b c p")
+        self.token_mix_layer = DenseBlock(
+            dim=self.n_patches, expansion_ratio=expansion_ratio
+        )
+        self.channel_mix_layer = DenseBlock(
+            dim=feature_dim, expansion_ratio=expansion_ratio
+        )
+
     def forward(self, x):
         x1 = self.layer_norm(x)
         x1 = self.transpose_layer(x1)
@@ -111,43 +106,37 @@ class GlobalAvgPool1d(nn.Module):
 
 
 class MLP_Mixer(nn.Module):
-    def __init__(self,
-                 img_size,
-                 patch_size,
-                 feature_dim,
-                 expansion_ratio,
-                 depth,
-                 n_classes
-                 ):
+    def __init__(
+        self, img_size, patch_size, feature_dim, expansion_ratio, depth, n_classes
+    ):
         super().__init__()
-        self.n_patches = (img_size//patch_size)**2
-        self.embed_block = PatchEmbedBlock(img_size, 
-                                           patch_size, 
-                                           feature_dim)
+        self.n_patches = (img_size // patch_size) ** 2
+        self.embed_block = PatchEmbedBlock(img_size, patch_size, feature_dim)
         self.mixer_blocks = nn.Sequential(
-            *[MixerBlock(img_size, 
-                         patch_size, 
-                         feature_dim, 
-                         expansion_ratio) for i in range(depth)],
+            *[
+                MixerBlock(img_size, patch_size, feature_dim, expansion_ratio)
+                for i in range(depth)
+            ],
             nn.LayerNorm(feature_dim),
             GlobalAvgPool1d()
         )
-        self.classifier = nn.Linear(feature_dim, 
-                                    n_classes)
+        self.classifier = nn.Linear(feature_dim, n_classes)
 
     def forward(self, x):
-        x = self.embed_block(x) # b p d
+        x = self.embed_block(x)  # b p d
         x = self.mixer_blocks(x)
         x = self.classifier(x)
         return x
 
 
 if __name__ == "__main__":
-    mixer = MLP_Mixer(img_size = 32, 
-                      patch_size = 4, 
-                      feature_dim = 128, 
-                      expansion_ratio = 2, 
-                      depth = 8,
-                      n_classes = 10)
-    
-    summary(mixer, (3,32,32), device='cpu')
+    mixer = MLP_Mixer(
+        img_size=32,
+        patch_size=4,
+        feature_dim=128,
+        expansion_ratio=2,
+        depth=8,
+        n_classes=10,
+    )
+
+    summary(mixer, (3, 32, 32), device="cpu")
