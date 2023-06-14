@@ -3,6 +3,7 @@
 
 *.ipynb
 !lectures/**/*.ipynb
+documents/mmengine/exp
 
 ### Python ###
 # Byte-compiled / optimized / DLL files
