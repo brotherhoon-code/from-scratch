@@ -4,6 +4,11 @@
 *.ipynb
 !lectures/**/*.ipynb
 documents/mmengine/exp
+lectures/GAN_첫걸음/img_align_celeba_20000
+lectures/GAN_첫걸음/*.zip
+lectures/GAN_첫걸음/mnist_test.csv
+lectures/GAN_첫걸음/mnist_train.csv
+
 
 ### Python ###
 # Byte-compiled / optimized / DLL files
