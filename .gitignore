@@ -8,6 +8,7 @@ lectures/GAN_첫걸음/img_align_celeba_20000
 lectures/GAN_첫걸음/*.zip
 lectures/GAN_첫걸음/mnist_test.csv
 lectures/GAN_첫걸음/mnist_train.csv
+lectures/GAN_첫걸음/*.h5py
 
 
 ### Python ###
